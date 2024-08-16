@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:util="http://www.springframework.org/schema/util"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+		http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-4.3.xsd http://www.springframework.org/schema/util https://www.springframework.org/schema/util/spring-util.xsd">
+
+    <!--扫包-->
+    <context:component-scan base-package="com.example"></context:component-scan>
+
+    <!-- c3p0数据源 -->
+    <bean id="dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource">
+        <property name="user" value="root"></property>
+        <property name="password" value="LL123"></property>
+        <property name="jdbcUrl" value="jdbc:mysql://192.168.31.158:3306/shiro?serverTimezone=Asia/Shanghai"></property>
+        <property name="driverClass" value="com.mysql.cj.jdbc.Driver"></property>
+    </bean>
+
+    <bean id="jdbcTemplate" class="org.springframework.jdbc.core.JdbcTemplate">
+        <property name="dataSource" ref="dataSource"></property>
+    </bean>
+
+    <!-- 配置緩存管理器 -->
+    <bean id="cacheManager" class="org.apache.shiro.cache.ehcache.EhCacheManager">
+        <!-- 指定 ehcache 的配置文件 -->
+        <property name="cacheManagerConfigFile" value="classpath:ehcache-shiro.xml"/>
+    </bean>
+
+    <!-- 配置进行授权和认证的 Realm   init-method="encipher" 在bean的初始化之前调用这个方法-->
+    <bean id="myRealm"	class="com.example.shiro.MyRealm" init-method="encipher">
+        <!-- 数据源 -->
+    </bean>
+
+    <!-- 配置 Shiro 的 SecurityManager Bean. -->
+    <bean id="securityManager" class="org.apache.shiro.web.mgt.DefaultWebSecurityManager">
+        <property name="realm" ref="myRealm"/>
+        <property name="cacheManager" ref="cacheManager"></property>
+    </bean>
+
+    <!-- 配置 Bean 后置处理器: 会自动的调用和 Spring 整合后各个组件的生命周期方法.shiro与SPRING-bean整合在一起 -->
+    <bean id="lifecycleBeanPostProcessor" class="org.apache.shiro.spring.LifecycleBeanPostProcessor"/>
+
+    <!--将自定义写的过滤器定义成bean 和 @Controller 效果是一样的-->
+    <!--这个是权限过滤器-->
+    <bean id="permissionFiter" class="com.example.shiro.PermissionFilter"></bean>
+
+    <!-- 配置 ShiroFilter bean: 该 bean 的 id 必须和 web.xml 文件中配置的 shiro filter 的 name 一致  -->
+    <!-- shiro过滤器配置-->
+    <bean id="shiroFilter" class="org.apache.shiro.spring.web.ShiroFilterFactoryBean">
+
+        <!-- 装配 securityManager -->
+        <property name="securityManager" ref="securityManager"/>
+
+        <!-- 登录页面，要是登录失败就继续登录  -->
+        <property name="loginUrl" value="/shiro-login.jsp"/>
+
+        <!-- 登录成功后跳转shiro-success.jsp 页面-->
+        <property name="successUrl" value="/shiro-success.jsp"/>
+
+        <!--     没登陆没权限，跳到登陆页面
+           		  如果已登陆 ，但是没权限，就会跳到下面的页面
+              -->
+
+        <!-- 登录后没权限会跳到这个 shiro-unauthorized.jsp 页面 -->
+        <property name="unauthorizedUrl" value="/shiro-unauthorized.jsp"/>
+
+        <!-- 具体配置需要拦截哪些 URL, 以及访问对应的 URL 时使用 Shiro 的什么 Filter 进行拦截.
+        从上向下执行,如果找到符合规则的配置,下面就不执行  -->
+        <property name="filterChainDefinitions">
+            <value>
+                <!-- 配置登出: 使用 logout 过滤器 -->
+                <!--
+                    logout：注销
+                    anon : 不认证也可以访问，表示可以匿名使用        需要认证
+                    authc：我只有认证（登录）过才能访问             需要认证
+                    roles：角色过滤器 判断当前用户是否是指定的角色   没登录前使用 需要认证  登录后使用  需要权限
+                -->
+                /shiro-logout = logout <!--注销-->
+                /shiro* = anon <!--这里要给登录的jsp 设置成 anon 不然不可以访问-->
+                /anon.jsp = anon
+                /authc.jsp = authc
+                /roles.jsp = roles["校长"]
+                /perms.jsp = perms["/aaabccc"]
+                /abc = permission <!--这个路径就会被自定义拦截器给拦住，要是没权限的话。 这个是下面设置的   自定义过滤器  -->
+                /** = authc <!-- 要是无法访问的jsp 或者是不存在的jsp 会直接跳转到登录页面 -->
+
+            </value>
+        </property>
+
+
+        <property name="filters">
+            <util:map>
+                <entry key="permission" value-ref="permissionFiter"></entry>
+            </util:map>
+        </property>
+
+
+    </bean>
+</beans>
